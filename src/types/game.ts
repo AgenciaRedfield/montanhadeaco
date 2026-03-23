@@ -14,7 +14,7 @@ export type ApiCard = {
   value: "ACE" | "KING" | "QUEEN" | "JACK" | string;
 };
 export type { CardClass, CardRarity };
-export type GameScreen = "menu" | "battle" | "victory" | "defeat";
+export type GameScreen = "menu" | "dashboard" | "forge" | "deck-builder" | "battle" | "victory" | "defeat";
 export type GamePhase = "idle" | "startTurn" | "drawPhase" | "resourcePhase" | "mainPhase" | "attackPhase" | "endPhase" | "enemyTurn" | "finished";
 export type TurnPhase = "idle" | "player" | "enemy" | "resolving";
 export type TargetType = "player" | "card";
@@ -51,12 +51,41 @@ export type BattleState = {
   selectedHandCardId: string | null;
   logs: string[];
   winner: PlayerId | null;
+  resultRecorded: boolean;
+};
+
+export type ProgressProfile = {
+  commanderName: string;
+  rank: string;
+  level: number;
+  forgeCredits: number;
+  battlesPlayed: number;
+  victories: number;
+  unlockedCards: string[];
+  selectedDeck: string[];
+  lastPlayedAt: string | null;
+  cloudEnabled: boolean;
+  syncStatus: "idle" | "saving" | "synced" | "local-only" | "error";
+};
+
+export type SettingsState = {
+  musicEnabled: boolean;
+  musicUnlocked: boolean;
+  musicVolume: number;
+};
+
+export type AuthState = {
+  userId: string | null;
+  email: string | null;
+  initialized: boolean;
+  magicLinkSentTo: string | null;
 };
 
 export type UIState = {
   screen: GameScreen;
   busy: boolean;
   status: string;
+  forgeResults: string[];
 };
 
 export type GameState = {
@@ -66,5 +95,9 @@ export type GameState = {
   player: PlayerState;
   enemy: PlayerState;
   battle: BattleState;
+  profile: ProgressProfile;
+  settings: SettingsState;
+  auth: AuthState;
+  hydrated: boolean;
   ui: UIState;
 };

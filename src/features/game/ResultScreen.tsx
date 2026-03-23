@@ -10,8 +10,8 @@ export const ResultScreen = () => {
 
   return (
     <GameLayout>
-      {screen === "victory" ? <VictoryModal onPlayAgain={startGame} onBackToMenu={() => setScreen("menu")} /> : null}
-      {screen === "defeat" ? <DefeatModal onPlayAgain={startGame} onBackToMenu={() => setScreen("menu")} /> : null}
+      {screen === "victory" ? <VictoryModal onPlayAgain={startGame} onBackToMenu={() => setScreen("dashboard")} /> : null}
+      {screen === "defeat" ? <DefeatModal onPlayAgain={startGame} onBackToMenu={() => setScreen("dashboard")} /> : null}
     </GameLayout>
   );
 };

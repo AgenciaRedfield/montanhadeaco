@@ -11,20 +11,20 @@ interface HandAreaProps {
 
 export const HandArea = ({ cards, disabled = false, onPlay, onCardHover }: HandAreaProps) => {
   return (
-    <section className="rounded-[2rem] border border-brass-700/30 bg-black/25 p-4 shadow-insetPanel backdrop-blur-xl">
-      <div className="mb-4 flex items-end justify-between gap-4">
+    <section className="rounded-[1.7rem] border border-brass-700/30 bg-black/22 p-3.5 shadow-insetPanel backdrop-blur-xl">
+      <div className="mb-3 flex items-end justify-between gap-4">
         <div>
-          <p className="text-[11px] uppercase tracking-[0.36em] text-brass-100/52">Mao do Comandante</p>
-          <h3 className="font-display text-2xl text-brass-50">Cartas Disponiveis</h3>
+          <p className="text-[10px] uppercase tracking-[0.34em] text-brass-100/50">Mao do Comandante</p>
+          <h3 className="font-display text-xl text-brass-50">Cartas Disponiveis</h3>
         </div>
-        <p className="text-xs uppercase tracking-[0.3em] text-brass-100/55">{cards.length} em reserva</p>
+        <p className="text-[10px] uppercase tracking-[0.26em] text-brass-100/50">{cards.length} em reserva</p>
       </div>
-      <div className="flex min-h-[16rem] items-end gap-2 overflow-x-auto overflow-y-hidden px-3 pb-3 pt-8">
+      <div className="flex min-h-[11.5rem] items-end gap-1 overflow-x-auto overflow-y-hidden px-2 pb-2 pt-5">
         {cards.map((card, index) => {
-          const offset = Math.min(index * 3, 24);
-          const rotate = (index - cards.length / 2) * 1.5;
+          const overlap = Math.min(index * 8, 52);
+          const rotate = (index - (cards.length - 1) / 2) * 1.1;
           return (
-            <motion.div key={card.instanceId} initial={{ opacity: 0, y: 60 }} animate={{ opacity: 1, y: 0, rotate }} whileHover={{ y: -18, rotate: 0, zIndex: 40 }} transition={{ type: "spring", stiffness: 130, damping: 18, delay: index * 0.03 }} style={{ marginLeft: index === 0 ? 0 : -offset, zIndex: index + 1 }} className="origin-bottom">
+            <motion.div key={card.instanceId} initial={{ opacity: 0, y: 42 }} animate={{ opacity: 1, y: 0, rotate }} whileHover={{ y: -12, rotate: 0, zIndex: 40 }} transition={{ type: "spring", stiffness: 130, damping: 18, delay: index * 0.025 }} style={{ marginLeft: index === 0 ? 0 : -overlap, zIndex: index + 1 }} className="origin-bottom">
               <CardView card={card} disabled={disabled} selectable={!disabled} onClick={() => onPlay(card)} onHoverChange={onCardHover} />
             </motion.div>
           );

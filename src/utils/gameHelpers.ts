@@ -1,5 +1,6 @@
 import { cards as cardPool } from "@/data/cards";
-import type { Card, PlayerId, RuntimeCard, StatusEffect } from "@/types/card";
+import { DECK_COPY_LIMIT, DECK_SIZE, defaultAuth, defaultProfile, defaultSettings, FORGE_PACK_SIZE, STARTER_DECK_IDS, STARTER_UNLOCK_IDS } from "@/services/progressionService";
+import type { Card, CardRarity, PlayerId, RuntimeCard, StatusEffect } from "@/types/card";
 import type { BattleState, GameState, PlayerState, UIState } from "@/types/game";
 
 export const MAX_HAND_SIZE = 10;
@@ -9,6 +10,15 @@ export const STARTING_STRUCTURAL_INTEGRITY = 30;
 export const STARTING_HAND_SIZE = 5;
 export const OVERPRESSURE_DANGER_THRESHOLD = 5;
 
+const forgeWeights: Record<CardRarity, number> = {
+  common: 6,
+  uncommon: 5,
+  rare: 3,
+  epic: 2,
+  legendary: 1,
+  mythic: 1,
+};
+
 const createInstanceId = (ownerId: PlayerId, cardId: string, index: number) => `${ownerId}-${cardId}-${index}-${crypto.randomUUID()}`;
 
 export const createRuntimeCard = (card: Card, ownerId: PlayerId, index: number): RuntimeCard => ({
@@ -16,6 +26,7 @@ export const createRuntimeCard = (card: Card, ownerId: PlayerId, index: number):
   instanceId: createInstanceId(ownerId, card.id, index),
   baseId: card.id,
   ownerId,
+  owner: ownerId,
   currentAttack: card.attack,
   currentDefense: card.defense,
   maxDefense: card.defense,
@@ -37,12 +48,83 @@ export const shuffleCards = <T,>(items: T[], seedOffset = 0): T[] => {
   return clone;
 };
 
-export const createDeck = (ownerId: PlayerId): RuntimeCard[] => {
-  const ordered = cardPool.map((card, index) => createRuntimeCard(card, ownerId, index));
+const buildDeckSource = (collection: Card[], size = DECK_SIZE): Card[] => {
+  const safeCollection = collection.length > 0 ? collection : cardPool.filter((card) => STARTER_UNLOCK_IDS.includes(card.id));
+  const source: Card[] = [];
+
+  for (let index = 0; index < size; index += 1) {
+    source.push(safeCollection[index % safeCollection.length]);
+  }
+
+  return source;
+};
+
+export const resolveCollectionCards = (unlockedCardIds: string[]): Card[] => {
+  const normalizedIds = unlockedCardIds.length > 0 ? unlockedCardIds : STARTER_UNLOCK_IDS;
+  const collection = normalizedIds
+    .map((cardId) => cardPool.find((card) => card.id === cardId))
+    .filter((card): card is Card => Boolean(card));
+
+  return collection.length > 0 ? collection : cardPool.filter((card) => STARTER_UNLOCK_IDS.includes(card.id));
+};
+
+export const resolveDeckCards = (deckIds: string[], unlockedCardIds: string[]): Card[] => {
+  const collection = resolveCollectionCards(unlockedCardIds);
+  const collectionMap = new Map(collection.map((card) => [card.id, card]));
+  const fromDeck = deckIds
+    .map((cardId) => collectionMap.get(cardId))
+    .filter((card): card is Card => Boolean(card));
+
+  if (fromDeck.length >= DECK_SIZE) {
+    return fromDeck.slice(0, DECK_SIZE);
+  }
+
+  const fallbackIds = STARTER_DECK_IDS.filter((cardId) => collectionMap.has(cardId));
+  const filled = [...fromDeck];
+  let index = 0;
+
+  while (filled.length < DECK_SIZE && fallbackIds.length > 0) {
+    const fallback = collectionMap.get(fallbackIds[index % fallbackIds.length]);
+    if (fallback) filled.push(fallback);
+    index += 1;
+  }
+
+  while (filled.length < DECK_SIZE) {
+    filled.push(collection[index % collection.length]);
+    index += 1;
+  }
+
+  return filled;
+};
+
+export const countDeckCopies = (deckIds: string[], cardId: string) => deckIds.filter((entry) => entry === cardId).length;
+export const canAddDeckCard = (deckIds: string[], cardId: string) => deckIds.length < DECK_SIZE && countDeckCopies(deckIds, cardId) < DECK_COPY_LIMIT;
+
+export const pickForgeRewards = (lockedCards: Card[], packSize = FORGE_PACK_SIZE): Card[] => {
+  if (lockedCards.length === 0) return [];
+
+  const available = [...lockedCards];
+  const results: Card[] = [];
+  const count = Math.min(packSize, available.length);
+
+  for (let draw = 0; draw < count; draw += 1) {
+    const weightedPool = available.flatMap((card) => Array.from({ length: forgeWeights[card.rarity] ?? 1 }, () => card));
+    const seed = (Date.now() + draw * 17) % weightedPool.length;
+    const reward = weightedPool[seed] ?? available[0];
+    results.push(reward);
+    const index = available.findIndex((card) => card.id === reward.id);
+    if (index >= 0) available.splice(index, 1);
+  }
+
+  return results;
+};
+
+export const createDeck = (ownerId: PlayerId, collection: Card[] = cardPool): RuntimeCard[] => {
+  const ordered = buildDeckSource(collection).map((card, index) => createRuntimeCard(card, ownerId, index));
   return shuffleCards(ordered, ownerId === "player" ? 1 : 2);
 };
 
-export const createPlayerState = (id: PlayerId, name: string): PlayerState => ({
+export const createPlayerState = (id: PlayerId, name: string, collection?: Card[]): PlayerState => ({
   id,
   name,
   structuralIntegrity: STARTING_STRUCTURAL_INTEGRITY,
@@ -51,7 +133,7 @@ export const createPlayerState = (id: PlayerId, name: string): PlayerState => ({
   maxSteamPressure: 1,
   overpressure: 0,
   shield: 0,
-  deck: createDeck(id),
+  deck: createDeck(id, collection),
   hand: [],
   board: [],
   graveyard: [],
@@ -63,21 +145,27 @@ export const initialBattleState = (): BattleState => ({
   selectedHandCardId: null,
   logs: [],
   winner: null,
+  resultRecorded: false,
 });
 
 export const initialUiState = (): UIState => ({
   screen: "menu",
   busy: false,
   status: "Os pistoes aguardam seu comando.",
+  forgeResults: [],
 });
 
 export const createInitialGameState = (): GameState => ({
   phase: "idle",
   turnNumber: 1,
   activePlayer: "player",
-  player: createPlayerState("player", "Comandante da Forja"),
-  enemy: createPlayerState("enemy", "Automato Soberano"),
+  player: createPlayerState("player", defaultProfile.commanderName, resolveDeckCards(defaultProfile.selectedDeck, defaultProfile.unlockedCards)),
+  enemy: createPlayerState("enemy", "Automato Soberano", cardPool),
   battle: initialBattleState(),
+  profile: defaultProfile,
+  settings: defaultSettings,
+  auth: defaultAuth,
+  hydrated: false,
   ui: initialUiState(),
 });
 
@@ -96,11 +184,8 @@ export const clonePlayer = (player: PlayerState): PlayerState => ({
 });
 
 export const pushLog = (logs: string[], entry: string): string[] => [entry, ...logs].slice(0, 30);
-
 export const findStatus = (card: RuntimeCard, key: StatusEffect["key"]) => card.statusEffects.find((status) => status.key === key);
-
-export const getStatusValue = (card: RuntimeCard, key: StatusEffect["key"]) =>
-  card.statusEffects.filter((status) => status.key === key).reduce((total, status) => total + status.value, 0);
+export const getStatusValue = (card: RuntimeCard, key: StatusEffect["key"]) => card.statusEffects.filter((status) => status.key === key).reduce((total, status) => total + status.value, 0);
 
 export const upsertStatus = (card: RuntimeCard, status: StatusEffect): RuntimeCard => {
   const existing = card.statusEffects.find((item) => item.key === status.key && item.duration === status.duration);
