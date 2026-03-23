@@ -1,12 +1,9 @@
-export type Side = "player" | "enemy";
-export type GameScreen = "menu" | "battle" | "victory" | "defeat";
-export type TurnPhase = "idle" | "player" | "enemy" | "resolving";
-export type CardClass = "support" | "assassin" | "tank" | "engineer";
-export type CardRarity = "common" | "uncommon" | "rare" | "epic" | "legendary" | "mythic";
-export type AbilityType = "criticalStrike" | "steamBurst" | "repair" | "shield" | "overclock";
-export type TargetType = "player" | "card";
+import type { CardClass, CardRarity, PlayerId, RuntimeCard } from "@/types/card";
 
-export interface ApiCard {
+export type Side = PlayerId;
+export type GameCard = RuntimeCard;
+export type AbilityType = string;
+export type ApiCard = {
   code: string;
   image: string;
   images: {
@@ -15,43 +12,59 @@ export interface ApiCard {
   };
   suit: "HEARTS" | "SPADES" | "CLUBS" | "DIAMONDS";
   value: "ACE" | "KING" | "QUEEN" | "JACK" | string;
-}
+};
+export type { CardClass, CardRarity };
+export type GameScreen = "menu" | "battle" | "victory" | "defeat";
+export type GamePhase = "idle" | "startTurn" | "drawPhase" | "resourcePhase" | "mainPhase" | "attackPhase" | "endPhase" | "enemyTurn" | "finished";
+export type TurnPhase = "idle" | "player" | "enemy" | "resolving";
+export type TargetType = "player" | "card";
 
-export interface GameCard {
-  id: string;
-  baseId: string;
-  code: string;
-  name: string;
-  suit: ApiCard["suit"];
-  value: ApiCard["value"];
-  class: CardClass;
-  rarity: CardRarity;
-  attack: number;
-  defense: number;
-  currentDefense: number;
-  energyCost: number;
-  ability: AbilityType;
-  description: string;
-  image: string;
-  owner: Side;
-  hasActed: boolean;
-  shield: number;
-}
-
-export interface CombatTarget {
+export type CombatTarget = {
   type: TargetType;
   id: string;
-  owner: Side;
-}
+  owner: PlayerId;
+};
 
-export interface ActorState {
-  side: Side;
+export type PendingStructuralDamage = {
+  amount: number;
+  source: string;
+};
+
+export type PlayerState = {
+  id: PlayerId;
   name: string;
   structuralIntegrity: number;
+  maxStructuralIntegrity: number;
   steamPressure: number;
   maxSteamPressure: number;
+  overpressure: number;
   shield: number;
-  hand: GameCard[];
-  board: GameCard[];
-  discard: GameCard[];
-}
+  deck: RuntimeCard[];
+  hand: RuntimeCard[];
+  board: RuntimeCard[];
+  graveyard: RuntimeCard[];
+  pendingStructuralDamage: PendingStructuralDamage[];
+};
+
+export type BattleState = {
+  selectedAttackerId: string | null;
+  selectedHandCardId: string | null;
+  logs: string[];
+  winner: PlayerId | null;
+};
+
+export type UIState = {
+  screen: GameScreen;
+  busy: boolean;
+  status: string;
+};
+
+export type GameState = {
+  phase: GamePhase;
+  turnNumber: number;
+  activePlayer: PlayerId;
+  player: PlayerState;
+  enemy: PlayerState;
+  battle: BattleState;
+  ui: UIState;
+};

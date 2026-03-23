@@ -1,7 +1,7 @@
-import { create } from "zustand";
+import { useGameStore } from "@/store/gameStore";
 import type { GameScreen } from "@/types/game";
 
-interface UiStore {
+type UiView = {
   screen: GameScreen;
   busy: boolean;
   status: string;
@@ -9,18 +9,19 @@ interface UiStore {
   setBusy: (busy: boolean) => void;
   setStatus: (status: string) => void;
   reset: () => void;
-}
-
-const initialState = {
-  screen: "menu" as GameScreen,
-  busy: false,
-  status: "Boilers await ignition.",
 };
 
-export const useUiStore = create<UiStore>((set) => ({
-  ...initialState,
-  setScreen: (screen) => set({ screen }),
-  setBusy: (busy) => set({ busy }),
-  setStatus: (status) => set({ status }),
-  reset: () => set(initialState),
-}));
+export const useUiStore = <T = UiView>(selector?: (state: UiView) => T) => {
+  return useGameStore((state) => {
+    const uiState: UiView = {
+      screen: state.ui.screen,
+      busy: state.ui.busy,
+      status: state.ui.status,
+      setScreen: (screen) => useGameStore.getState().setScreen(screen),
+      setBusy: (busy) => useGameStore.getState().setBusy(busy),
+      setStatus: (status) => useGameStore.getState().setStatus(status),
+      reset: () => useGameStore.getState().resetGame(),
+    };
+    return selector ? selector(uiState) : (uiState as T);
+  });
+};

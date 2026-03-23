@@ -60,11 +60,11 @@ export const CardView = ({ card, compact = false, selectable = false, selected =
             <img src={card.image} alt={card.name} className="h-full w-full object-cover opacity-85 mix-blend-screen" />
           ) : (
             <div className="flex h-full items-center justify-center bg-gradient-to-br from-copper-700/30 to-brass-900/20">
-              <span className="font-display text-4xl text-brass-100/80">{card.value === "10" ? "10" : card.value[0]}</span>
+              <span className="font-display text-4xl text-brass-100/80">{(card.value ?? card.name).slice(0, 2)}</span>
             </div>
           )}
           <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 to-transparent p-2">
-            <p className="text-[10px] uppercase tracking-[0.28em] text-brass-100/75">{abilityLabel[card.ability]}</p>
+            <p className="text-[10px] uppercase tracking-[0.28em] text-brass-100/75">{abilityLabel[card.ability as keyof typeof abilityLabel] ?? card.ability}</p>
             <p className="line-clamp-2 text-[11px] leading-tight text-brass-50/85">{card.description}</p>
           </div>
         </div>

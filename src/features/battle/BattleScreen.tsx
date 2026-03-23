@@ -75,8 +75,8 @@ export const BattleScreen = () => {
             <div className="grid min-h-56 grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
               <AnimatePresence>
                 {enemy.board.map((card) => (
-                  <motion.div key={card.id} layout initial={{ opacity: 0, y: -24 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9 }}>
-                    <CardView card={card} compact selectable={turn === "player" && !!selectedAttackerId} onClick={() => onTarget({ type: "card", id: card.id, owner: "enemy" })} />
+                  <motion.div key={card.instanceId} layout initial={{ opacity: 0, y: -24 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9 }}>
+                    <CardView card={card} compact selectable={turn === "player" && !!selectedAttackerId} onClick={() => onTarget({ type: "card", id: card.instanceId, owner: "enemy" })} />
                   </motion.div>
                 ))}
               </AnimatePresence>
@@ -129,14 +129,14 @@ export const BattleScreen = () => {
             <div className="mb-5 grid min-h-56 grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
               <AnimatePresence>
                 {player.board.map((card) => (
-                  <motion.div key={card.id} layout initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9 }}>
+                  <motion.div key={card.instanceId} layout initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9 }}>
                     <CardView
                       card={card}
                       compact
                       selectable={turn === "player"}
-                      selected={selectedAttackerId === card.id}
+                      selected={selectedAttackerId === card.instanceId}
                       disabled={turn !== "player" || card.hasActed}
-                      onClick={() => onSelectAttacker(card.id)}
+                      onClick={() => onSelectAttacker(card.instanceId)}
                     />
                   </motion.div>
                 ))}
@@ -153,12 +153,12 @@ export const BattleScreen = () => {
               </div>
               <div className="flex gap-4 overflow-x-auto pb-2">
                 {player.hand.map((card, index) => (
-                  <motion.div key={card.id} initial={{ opacity: 0, y: 36 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.04 }}>
+                  <motion.div key={card.instanceId} initial={{ opacity: 0, y: 36 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.04 }}>
                     <CardView
                       card={card}
                       selectable={turn === "player"}
-                      disabled={turn !== "player" || player.steamPressure < card.energyCost || player.board.length >= 5}
-                      onClick={() => playCard("player", card.id)}
+                      disabled={turn !== "player" || player.board.length >= 5}
+                      onClick={() => playCard("player", card.instanceId)}
                     />
                   </motion.div>
                 ))}

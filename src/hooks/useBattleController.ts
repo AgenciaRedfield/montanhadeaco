@@ -12,9 +12,9 @@ export const useBattleController = () => {
 
   const onSelectAttacker = (cardId: string) => {
     if (turn !== "player") return;
-    const card = playerBoard.find((entry) => entry.id === cardId);
-    if (!card || card.hasActed) return;
-    selectAttacker(cardId === selectedAttackerId ? null : cardId);
+    const card = playerBoard.find((entry) => entry.instanceId === cardId || entry.id === cardId);
+    if (!card || card.hasActed || !card.canAttack) return;
+    selectAttacker((card.instanceId ?? cardId) === selectedAttackerId ? null : (card.instanceId ?? cardId));
   };
 
   const onTarget = (target: CombatTarget) => {

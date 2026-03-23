@@ -1,287 +1,414 @@
 import { create } from "zustand";
-import { createDeck, drawCards, reshuffle } from "@/services/deckApi";
-import { useBattleStore } from "@/store/battleStore";
-import { useEnemyStore } from "@/store/enemyStore";
-import { usePlayerStore } from "@/store/playerStore";
-import { useUiStore } from "@/store/uiStore";
-import type { CombatTarget, GameCard, Side } from "@/types/game";
+import { buildEnemyPlan } from "@/utils/ai";
+import { canDirectAttack, canUnitAttack, estimateAttackDamage, getTauntUnits } from "@/utils/combat";
+import {
+  addOverpressure,
+  buffUnitAttack,
+  damageUnit,
+  dealDamageToPlayer,
+  gainSteam,
+  healPlayerBy,
+  healUnitBy,
+  onAttackResolvers,
+  onDeathResolvers,
+  onPlayResolvers,
+  passiveTickResolvers,
+  resolveOverpressurePenalty,
+  resolvePendingStructuralDamage,
+} from "@/utils/abilityResolvers";
+import {
+  clonePlayer,
+  createInitialGameState,
+  findCard,
+  MAX_BOARD_SIZE,
+  MAX_HAND_SIZE,
+  MAX_STEAM_PRESSURE,
+  pushLog,
+  removeCardFromZone,
+  tickStatuses,
+  upsertStatus,
+} from "@/utils/gameHelpers";
+import type { PlayerId, RuntimeCard } from "@/types/card";
+import type { CombatTarget, GamePhase, GameState, PlayerState } from "@/types/game";
 
-interface GameStore {
-  deckId: string | null;
-  remainingCards: number;
-  startGame: () => Promise<void>;
-  drawCard: (side: Side, count?: number) => Promise<void>;
-  playCard: (side: Side, cardId: string) => void;
+type GameStore = GameState & {
+  startGame: () => void;
+  resetGame: () => void;
+  startTurn: (playerId: PlayerId) => void;
+  drawCard: (playerId: PlayerId) => void;
+  refillSteamPressure: (playerId: PlayerId) => void;
+  increaseMaxSteamPressure: (playerId: PlayerId) => void;
+  playCard: (playerId: PlayerId, cardId: string) => void;
+  summonToBoard: (playerId: PlayerId, card: RuntimeCard) => void;
   attack: (attackerId: string, target: CombatTarget) => void;
-  endTurn: () => Promise<void>;
-  enemyTurn: () => Promise<void>;
-}
-
-const getActorStore = (side: Side) => (side === "player" ? usePlayerStore : useEnemyStore);
-const getOpponentSide = (side: Side): Side => (side === "player" ? "enemy" : "player");
-
-const resolveAbilityOnPlay = (card: GameCard, side: Side) => {
-  const actor = getActorStore(side).getState();
-  const opponent = getActorStore(getOpponentSide(side)).getState();
-  const battle = useBattleStore.getState();
-
-  switch (card.ability) {
-    case "repair":
-      actor.heal(2);
-      battle.pushLog(`${card.name} repairs 2 Structural Integrity.`);
-      break;
-    case "shield":
-      actor.addShield(2);
-      battle.pushLog(`${card.name} raises 2 shield.`);
-      break;
-    case "overclock":
-      actor.updateBoardCard(card.id, (current) => ({
-        ...current,
-        attack: current.attack + 1,
-        currentDefense: current.currentDefense + 1,
-      }));
-      battle.pushLog(`${card.name} enters overclock and gains +1/+1.`);
-      break;
-    case "steamBurst":
-      opponent.takeDamage(2);
-      battle.pushLog(`${card.name} vents steam for 2 direct damage.`);
-      break;
-    default:
-      break;
-  }
+  attackUnit: (attackerId: string, targetId: string) => void;
+  attackPlayer: (attackerId: string, targetPlayerId: PlayerId) => void;
+  applyDamageToUnit: (unitId: string, amount: number) => void;
+  applyDamageToPlayer: (playerId: PlayerId, amount: number) => void;
+  healUnit: (unitId: string, amount: number) => void;
+  healPlayer: (playerId: PlayerId, amount: number) => void;
+  applyShield: (unitId: string, amount: number) => void;
+  destroyUnit: (unitId: string) => void;
+  moveToGraveyard: (playerId: PlayerId, card: RuntimeCard) => void;
+  endTurn: () => void;
+  runEnemyTurn: () => void;
+  selectAttacker: (cardId: string | null) => void;
+  selectHandCard: (cardId: string | null) => void;
+  setScreen: (screen: GameState["ui"]["screen"]) => void;
+  setStatus: (status: string) => void;
+  setBusy: (busy: boolean) => void;
 };
 
-const markCardAsActed = (side: Side, cardId: string) => {
-  getActorStore(side).getState().updateBoardCard(cardId, (card) => ({ ...card, hasActed: true }));
-};
-
-const cleanupDestroyed = () => {
-  const player = usePlayerStore.getState();
-  const enemy = useEnemyStore.getState();
-  const battle = useBattleStore.getState();
-
-  player.board.filter((card) => card.currentDefense <= 0).forEach((card) => {
-    player.removeBoardCard(card.id);
-    battle.pushLog(`${card.name} collapses into scrap.`);
-  });
-
-  enemy.board.filter((card) => card.currentDefense <= 0).forEach((card) => {
-    enemy.removeBoardCard(card.id);
-    battle.pushLog(`${card.name} is crushed under pressure.`);
-  });
-};
-
-const updateWinner = () => {
-  const player = usePlayerStore.getState();
-  const enemy = useEnemyStore.getState();
-  const battle = useBattleStore.getState();
-  const ui = useUiStore.getState();
-
-  if (player.structuralIntegrity <= 0) {
-    battle.setWinner("enemy");
-    ui.setScreen("defeat");
-    ui.setStatus("The Mountain of Steel falls silent.");
-  } else if (enemy.structuralIntegrity <= 0) {
-    battle.setWinner("player");
-    ui.setScreen("victory");
-    ui.setStatus("The furnace answers only to your command.");
-  }
-};
-
-const damageUnit = (side: Side, cardId: string, amount: number) => {
-  getActorStore(side).getState().updateBoardCard(cardId, (card) => {
-    const absorbed = Math.min(card.shield, amount);
-    const finalDamage = Math.max(0, amount - absorbed);
-    return {
-      ...card,
-      shield: Math.max(0, card.shield - amount),
-      currentDefense: card.currentDefense - finalDamage,
-    };
-  });
-};
-
-const abilityAttackModifier = (card: GameCard) => {
-  switch (card.ability) {
-    case "criticalStrike":
-      return Math.random() < 0.4 ? card.attack + 2 : card.attack;
-    case "overclock":
-      return card.attack + 1;
-    default:
-      return card.attack;
-  }
-};
-
-const startTurn = async (side: Side, opening = false) => {
-  const battle = useBattleStore.getState();
-  const ui = useUiStore.getState();
-  const actor = getActorStore(side).getState();
-
-  battle.setTurn(side);
-  battle.selectAttacker(null);
-  actor.refreshBoard();
-
-  if (!opening) {
-    actor.replenishSteam(false);
-    await useGameStore.getState().drawCard(side, 1);
+const getActor = (state: GameState, playerId: PlayerId): PlayerState => (playerId === "player" ? state.player : state.enemy);
+const getOpponentId = (playerId: PlayerId): PlayerId => (playerId === "player" ? "enemy" : "player");
+const setActor = (state: GameState, playerId: PlayerId, next: PlayerState) => {
+  if (playerId === "player") {
+    state.player = next;
   } else {
-    actor.replenishSteam(true);
+    state.enemy = next;
   }
-
-  ui.setStatus(
-    side === "player"
-      ? "Your Steam Pressure is primed. Command the Industrial Platform."
-      : "Enemy gears bite down and pressure rises.",
-  );
 };
 
-const executeEnemyActions = async () => {
-  const enemy = useEnemyStore.getState();
-  const player = usePlayerStore.getState();
+const mutateActor = (state: GameState, playerId: PlayerId, updater: (player: PlayerState) => PlayerState) => {
+  setActor(state, playerId, updater(getActor(state, playerId)));
+};
 
-  const playable = [...enemy.hand]
-    .filter((card) => card.energyCost <= enemy.steamPressure && enemy.board.length < 5)
-    .sort((a, b) => {
-      const aScore = a.attack + a.defense + (enemy.structuralIntegrity <= 12 && (a.ability === "repair" || a.ability === "shield") ? 4 : 0);
-      const bScore = b.attack + b.defense + (enemy.structuralIntegrity <= 12 && (b.ability === "repair" || b.ability === "shield") ? 4 : 0);
-      return bScore - aScore;
+const resolveWinner = (state: GameState) => {
+  if (state.player.structuralIntegrity <= 0) {
+    state.battle.winner = "enemy";
+    state.phase = "finished";
+    state.ui.screen = "defeat";
+    state.ui.status = "A Montanha de Aço entra em colapso.";
+  } else if (state.enemy.structuralIntegrity <= 0) {
+    state.battle.winner = "player";
+    state.phase = "finished";
+    state.ui.screen = "victory";
+    state.ui.status = "A forja suprema responde ao seu comando.";
+  }
+};
+
+const log = (state: GameState, entry: string) => {
+  state.battle.logs = pushLog(state.battle.logs, entry);
+};
+
+const refreshBoardForTurn = (state: GameState, playerId: PlayerId) => {
+  mutateActor(state, playerId, (actor) => ({
+    ...actor,
+    board: actor.board.map((card) => {
+      const ticked = tickStatuses(card);
+      return {
+        ...ticked,
+        currentAttack: Math.max(0, ticked.attack + ticked.statusEffects.filter((status) => status.key === "bonusAttack").reduce((total, status) => total + status.value, 0)),
+        canAttack: true,
+        hasActed: false,
+        summonSickness: false,
+      };
+    }),
+  }));
+};
+
+const buildAbilityContext = (state: GameState, actorId: PlayerId, sourceCard?: RuntimeCard) => ({
+  state,
+  actorId,
+  opponentId: getOpponentId(actorId),
+  sourceCard,
+});
+
+const destroyDeadUnits = (state: GameState) => {
+  (["player", "enemy"] as const).forEach((ownerId) => {
+    const actor = getActor(state, ownerId);
+    const destroyed = actor.board.filter((card) => card.currentDefense <= 0);
+    if (destroyed.length === 0) return;
+    destroyed.forEach((card) => {
+      const resolver = onDeathResolvers[card.ability];
+      if (resolver) resolver(buildAbilityContext(state, ownerId, card));
+      mutateActor(state, ownerId, (current) => ({
+        ...current,
+        board: removeCardFromZone(current.board, card.instanceId),
+        graveyard: [...current.graveyard, card],
+      }));
+      log(state, `${card.name} é removida da Plataforma Industrial.`);
     });
+  });
+  resolveWinner(state);
+};
 
-  for (const card of playable) {
-    if (useEnemyStore.getState().steamPressure < card.energyCost || useEnemyStore.getState().board.length >= 5) continue;
-    useGameStore.getState().playCard("enemy", card.id);
-  }
+const drawOneCard = (state: GameState, playerId: PlayerId) => {
+  const actor = getActor(state, playerId);
+  if (actor.deck.length === 0 || actor.hand.length >= MAX_HAND_SIZE) return;
+  const [drawn, ...restDeck] = actor.deck;
+  setActor(state, playerId, { ...actor, deck: restDeck, hand: [...actor.hand, drawn] });
+  log(state, `${actor.name} compra ${drawn.name}.`);
+};
 
-  const enemyBoard = [...useEnemyStore.getState().board].sort((a, b) => b.attack - a.attack);
+const applyStartTurnPassives = (state: GameState, playerId: PlayerId) => {
+  getActor(state, playerId).board.forEach((unit) => {
+    const resolver = passiveTickResolvers[unit.ability];
+    if (resolver) resolver(buildAbilityContext(state, playerId, unit));
+  });
+  destroyDeadUnits(state);
+};
 
-  for (const attacker of enemyBoard) {
-    const latest = useEnemyStore.getState().board.find((card) => card.id === attacker.id);
-    if (!latest || latest.hasActed) continue;
+const paySteamPressure = (state: GameState, playerId: PlayerId, cost: number) => {
+  const actor = getActor(state, playerId);
+  const deficit = Math.max(0, cost - actor.steamPressure);
+  mutateActor(state, playerId, (current) => ({ ...current, steamPressure: Math.max(0, current.steamPressure - cost) }));
+  if (deficit > 0) addOverpressure(state, playerId, deficit);
+};
 
-    const currentPlayer = usePlayerStore.getState();
-    const refreshedBoard = [...currentPlayer.board].sort((a, b) => a.currentDefense - b.currentDefense);
-    const lethal = latest.attack >= currentPlayer.structuralIntegrity + currentPlayer.shield;
+const locateUnit = (state: GameState, unitId: string): { ownerId: PlayerId; card: RuntimeCard } | null => {
+  const playerCard = findCard(state.player.board, unitId);
+  if (playerCard) return { ownerId: "player", card: playerCard };
+  const enemyCard = findCard(state.enemy.board, unitId);
+  if (enemyCard) return { ownerId: "enemy", card: enemyCard };
+  return null;
+};
 
-    if (lethal || refreshedBoard.length === 0) {
-      useGameStore.getState().attack(latest.id, { type: "player", id: "player-core", owner: "player" });
-      if (useBattleStore.getState().winner) return;
-      continue;
-    }
-
-    const target =
-      refreshedBoard.find((card) => card.attack >= latest.currentDefense) ??
-      refreshedBoard.find((card) => card.currentDefense <= latest.attack) ??
-      refreshedBoard[0];
-
-    if (target) {
-      useGameStore.getState().attack(latest.id, { type: "card", id: target.id, owner: "player" });
-      if (useBattleStore.getState().winner) return;
-    }
-  }
+const markAttackerActed = (state: GameState, ownerId: PlayerId, unitId: string) => {
+  mutateActor(state, ownerId, (actor) => ({
+    ...actor,
+    board: actor.board.map((card) =>
+      card.instanceId === unitId
+        ? { ...card, hasActed: true, canAttack: false, attackCount: card.attackCount + 1 }
+        : card,
+    ),
+  }));
 };
 
 export const useGameStore = create<GameStore>((set, get) => ({
-  deckId: null,
-  remainingCards: 0,
-  startGame: async () => {
-    const ui = useUiStore.getState();
-    const battle = useBattleStore.getState();
-    const player = usePlayerStore.getState();
-    const enemy = useEnemyStore.getState();
+  ...createInitialGameState(),
 
-    ui.setBusy(true);
-    ui.setScreen("menu");
-    ui.setStatus("Pressurizing the Mountain of Steel...");
-    player.reset();
-    enemy.reset();
-    battle.reset();
-
-    const deck = await createDeck();
-    set({ deckId: deck.deckId, remainingCards: deck.remaining });
-
-    const playerDraw = await drawCards(deck.deckId, 5, "player");
-    const enemyDraw = await drawCards(deck.deckId, 5, "enemy");
-
-    player.setHand(playerDraw.cards);
-    enemy.setHand(enemyDraw.cards);
-    set({ remainingCards: Math.min(playerDraw.remaining, enemyDraw.remaining) });
-
-    ui.setScreen("battle");
-    ui.setBusy(false);
-    battle.pushLog("Valves crack open. Battle begins.");
-    await startTurn("player", true);
-  },
-  drawCard: async (side, count = 1) => {
-    const { deckId, remainingCards } = get();
-    if (remainingCards <= count) {
-      await reshuffle(deckId);
+  startGame: () => {
+    const base = createInitialGameState();
+    for (let count = 0; count < 5; count += 1) {
+      drawOneCard(base, "player");
+      drawOneCard(base, "enemy");
     }
-
-    const actor = getActorStore(side).getState();
-    const drawn = await drawCards(deckId, count, side);
-    actor.drawToHand(drawn.cards);
-    set({ remainingCards: drawn.remaining });
-    useBattleStore.getState().pushLog(`${side === "player" ? "Your foundry" : "Enemy boiler"} draws ${count} card(s).`);
+    base.ui.screen = "battle";
+    base.ui.status = "A batalha pela Montanha de Aço começou.";
+    base.phase = "mainPhase";
+    set(base);
   },
-  playCard: (side, cardId) => {
-    const actorStore = getActorStore(side);
-    const actor = actorStore.getState();
-    const ui = useUiStore.getState();
-    const card = actor.hand.find((item) => item.id === cardId);
 
-    if (!card || card.energyCost > actor.steamPressure || actor.board.length >= 5) return;
+  resetGame: () => set(createInitialGameState()),
 
-    actor.spendSteam(card.energyCost);
-    const deployed = actor.deployCard(cardId);
-    if (!deployed) return;
-
-    resolveAbilityOnPlay(deployed, side);
-    useBattleStore.getState().pushLog(`${side === "player" ? "You deploy" : "Enemy deploys"} ${deployed.name}.`);
-    ui.setStatus(side === "player" ? `${deployed.name} locks onto the Industrial Platform.` : `${deployed.name} advances through steam and brass.`);
-    cleanupDestroyed();
-    updateWinner();
+  startTurn: (playerId) => {
+    set((current) => {
+      const state: GameState = { ...current, player: clonePlayer(current.player), enemy: clonePlayer(current.enemy), battle: { ...current.battle }, ui: { ...current.ui } };
+      state.activePlayer = playerId;
+      state.phase = "startTurn";
+      if (playerId === "player") state.turnNumber += current.activePlayer === "enemy" ? 1 : 0;
+      resolvePendingStructuralDamage(state, playerId);
+      state.phase = "drawPhase";
+      drawOneCard(state, playerId);
+      state.phase = "resourcePhase";
+      mutateActor(state, playerId, (actor) => ({
+        ...actor,
+        maxSteamPressure: Math.min(MAX_STEAM_PRESSURE, actor.maxSteamPressure + (state.turnNumber === 1 && playerId === "player" && current.phase === "idle" ? 0 : 1)),
+      }));
+      mutateActor(state, playerId, (actor) => ({ ...actor, steamPressure: actor.maxSteamPressure }));
+      refreshBoardForTurn(state, playerId);
+      applyStartTurnPassives(state, playerId);
+      state.phase = playerId === "enemy" ? "enemyTurn" : "mainPhase";
+      state.ui.status = playerId === "player" ? "Sua caldeira está pronta." : "O inimigo ajusta a pressão.";
+      resolveWinner(state);
+      return state;
+    });
   },
-  attack: (attackerId, target) => {
-    const attackerSide: Side = target.owner === "player" ? "enemy" : "player";
-    const attackerStore = getActorStore(attackerSide).getState();
-    const targetStore = getActorStore(target.owner).getState();
-    const attacker = attackerStore.board.find((card) => card.id === attackerId);
-    if (!attacker || attacker.hasActed) return;
 
-    const attackPower = abilityAttackModifier(attacker);
-    const battle = useBattleStore.getState();
+  drawCard: (playerId) => set((current) => {
+    const state: GameState = { ...current, player: clonePlayer(current.player), enemy: clonePlayer(current.enemy), battle: { ...current.battle }, ui: { ...current.ui } };
+    drawOneCard(state, playerId);
+    return state;
+  }),
 
-    if (target.type === "player") {
-      const damage = targetStore.takeDamage(attackPower);
-      battle.pushLog(`${attacker.name} cracks the hull for ${damage} direct damage.`);
-    } else {
-      const defender = targetStore.board.find((card) => card.id === target.id);
-      if (!defender) return;
+  refillSteamPressure: (playerId) => set((current) => {
+    const state = { ...current, player: clonePlayer(current.player), enemy: clonePlayer(current.enemy) } as GameState;
+    mutateActor(state, playerId, (actor) => ({ ...actor, steamPressure: actor.maxSteamPressure }));
+    return state;
+  }),
 
-      damageUnit(target.owner, defender.id, attackPower);
-      damageUnit(attackerSide, attacker.id, defender.attack);
-      battle.pushLog(`${attacker.name} slams into ${defender.name}.`);
+  increaseMaxSteamPressure: (playerId) => set((current) => {
+    const state = { ...current, player: clonePlayer(current.player), enemy: clonePlayer(current.enemy) } as GameState;
+    mutateActor(state, playerId, (actor) => ({ ...actor, maxSteamPressure: Math.min(MAX_STEAM_PRESSURE, actor.maxSteamPressure + 1) }));
+    return state;
+  }),
 
-      if (attacker.ability === "steamBurst") {
-        getActorStore(target.owner).getState().takeDamage(1);
-        battle.pushLog(`${attacker.name} releases residual steam for 1 extra core damage.`);
+  summonToBoard: (playerId, card) => set((current) => {
+    const state = { ...current, player: clonePlayer(current.player), enemy: clonePlayer(current.enemy) } as GameState;
+    mutateActor(state, playerId, (actor) => ({
+      ...actor,
+      board: [...actor.board, { ...card, canAttack: false, hasActed: false, summonSickness: true }],
+    }));
+    return state;
+  }),
+
+  playCard: (playerId, cardId) => set((current) => {
+    const state: GameState = { ...current, player: clonePlayer(current.player), enemy: clonePlayer(current.enemy), battle: { ...current.battle }, ui: { ...current.ui } };
+    const actor = getActor(state, playerId);
+    if (state.battle.winner || actor.board.length >= MAX_BOARD_SIZE) return current;
+    const card = findCard(actor.hand, cardId);
+    if (!card) return current;
+
+    paySteamPressure(state, playerId, card.energyCost);
+    mutateActor(state, playerId, (currentActor) => ({
+      ...currentActor,
+      hand: removeCardFromZone(currentActor.hand, cardId),
+      board: [...currentActor.board, { ...card, canAttack: false, hasActed: false, summonSickness: true }],
+    }));
+
+    const summoned = findCard(getActor(state, playerId).board, cardId);
+    if (summoned) {
+      const resolver = onPlayResolvers[summoned.ability];
+      if (resolver) resolver(buildAbilityContext(state, playerId, summoned));
+      if (summoned.ability === "overpressureGrowth" && getActor(state, playerId).overpressure > 0) {
+        buffUnitAttack(state, playerId, summoned.instanceId, getActor(state, playerId).overpressure, null, summoned.name);
       }
     }
 
-    markCardAsActed(attackerSide, attacker.id);
-    cleanupDestroyed();
-    updateWinner();
+    log(state, `${actor.name} mobiliza ${card.name}.`);
+    state.ui.status = `${card.name} entra na Plataforma Industrial.`;
+    destroyDeadUnits(state);
+    resolveWinner(state);
+    return state;
+  }),
+
+  attack: (attackerId, target) => {
+    if (target.type === "player") {
+      get().attackPlayer(attackerId, target.owner);
+      return;
+    }
+    get().attackUnit(attackerId, target.id);
   },
-  endTurn: async () => {
-    if (useBattleStore.getState().winner) return;
-    useBattleStore.getState().setTurn("resolving");
-    useUiStore.getState().setStatus("Pressure shifts across the chamber.");
-    await get().enemyTurn();
+
+  attackUnit: (attackerId, targetId) => set((current) => {
+    const state: GameState = { ...current, player: clonePlayer(current.player), enemy: clonePlayer(current.enemy), battle: { ...current.battle }, ui: { ...current.ui } };
+    const attackerRef = locateUnit(state, attackerId);
+    const defenderRef = locateUnit(state, targetId);
+    if (!attackerRef || !defenderRef) return current;
+    if (!canUnitAttack(attackerRef.card)) return current;
+    const taunts = getTauntUnits(getActor(state, defenderRef.ownerId).board);
+    if (taunts.length > 0 && !taunts.some((unit) => unit.instanceId === targetId)) return current;
+
+    const attackBonus = onAttackResolvers[attackerRef.card.ability]?.({ ...buildAbilityContext(state, attackerRef.ownerId, attackerRef.card), targetUnitId: targetId }) ?? 0;
+    const damage = estimateAttackDamage(attackerRef.card) + attackBonus;
+    damageUnit(state, defenderRef.ownerId, defenderRef.card.instanceId, damage, attackerRef.card.name);
+
+    const refreshedDefender = findCard(getActor(state, defenderRef.ownerId).board, defenderRef.card.instanceId);
+    if (refreshedDefender && refreshedDefender.currentDefense > 0) {
+      damageUnit(state, attackerRef.ownerId, attackerRef.card.instanceId, refreshedDefender.currentAttack, refreshedDefender.name);
+    }
+
+    markAttackerActed(state, attackerRef.ownerId, attackerRef.card.instanceId);
+    log(state, `${attackerRef.card.name} ataca ${defenderRef.card.name}.`);
+    destroyDeadUnits(state);
+    resolveWinner(state);
+    return state;
+  }),
+
+  attackPlayer: (attackerId, targetPlayerId) => set((current) => {
+    const state: GameState = { ...current, player: clonePlayer(current.player), enemy: clonePlayer(current.enemy), battle: { ...current.battle }, ui: { ...current.ui } };
+    const attackerRef = locateUnit(state, attackerId);
+    if (!attackerRef || !canUnitAttack(attackerRef.card)) return current;
+    if (!canDirectAttack(getActor(state, targetPlayerId).board)) return current;
+
+    const attackBonus = onAttackResolvers[attackerRef.card.ability]?.({ ...buildAbilityContext(state, attackerRef.ownerId, attackerRef.card), targetPlayerId }) ?? 0;
+    dealDamageToPlayer(state, targetPlayerId, estimateAttackDamage(attackerRef.card) + attackBonus, attackerRef.card.name);
+    markAttackerActed(state, attackerRef.ownerId, attackerRef.card.instanceId);
+    log(state, `${attackerRef.card.name} atinge diretamente ${getActor(state, targetPlayerId).name}.`);
+    resolveWinner(state);
+    return state;
+  }),
+
+  applyDamageToUnit: (unitId, amount) => set((current) => {
+    const state = { ...current, player: clonePlayer(current.player), enemy: clonePlayer(current.enemy), battle: { ...current.battle }, ui: { ...current.ui } } as GameState;
+    const ref = locateUnit(state, unitId);
+    if (!ref) return current;
+    damageUnit(state, ref.ownerId, unitId, amount, "efeito externo");
+    destroyDeadUnits(state);
+    return state;
+  }),
+
+  applyDamageToPlayer: (playerId, amount) => set((current) => {
+    const state = { ...current, player: clonePlayer(current.player), enemy: clonePlayer(current.enemy), battle: { ...current.battle }, ui: { ...current.ui } } as GameState;
+    dealDamageToPlayer(state, playerId, amount, "efeito externo");
+    resolveWinner(state);
+    return state;
+  }),
+
+  healUnit: (unitId, amount) => set((current) => {
+    const state = { ...current, player: clonePlayer(current.player), enemy: clonePlayer(current.enemy), battle: { ...current.battle } } as GameState;
+    const ref = locateUnit(state, unitId);
+    if (!ref) return current;
+    healUnitBy(state, ref.ownerId, unitId, amount, "efeito externo");
+    return state;
+  }),
+
+  healPlayer: (playerId, amount) => set((current) => {
+    const state = { ...current, player: clonePlayer(current.player), enemy: clonePlayer(current.enemy), battle: { ...current.battle } } as GameState;
+    healPlayerBy(state, playerId, amount, "efeito externo");
+    return state;
+  }),
+
+  applyShield: (unitId, amount) => set((current) => {
+    const state = { ...current, player: clonePlayer(current.player), enemy: clonePlayer(current.enemy), battle: { ...current.battle } } as GameState;
+    const ref = locateUnit(state, unitId);
+    if (!ref) return current;
+    mutateActor(state, ref.ownerId, (actor) => ({
+      ...actor,
+      board: actor.board.map((card) => card.instanceId === unitId ? { ...upsertStatus({ ...card, shield: card.shield + amount }, { key: "shield", value: amount, duration: null }), shield: card.shield + amount } : card),
+    }));
+    return state;
+  }),
+
+  destroyUnit: (unitId) => set((current) => {
+    const state = { ...current, player: clonePlayer(current.player), enemy: clonePlayer(current.enemy), battle: { ...current.battle }, ui: { ...current.ui } } as GameState;
+    const ref = locateUnit(state, unitId);
+    if (!ref) return current;
+    mutateActor(state, ref.ownerId, (actor) => ({ ...actor, board: actor.board.map((card) => card.instanceId === unitId ? { ...card, currentDefense: 0 } : card) }));
+    destroyDeadUnits(state);
+    return state;
+  }),
+
+  moveToGraveyard: (playerId, card) => set((current) => {
+    const state = { ...current, player: clonePlayer(current.player), enemy: clonePlayer(current.enemy) } as GameState;
+    mutateActor(state, playerId, (actor) => ({ ...actor, graveyard: [...actor.graveyard, card] }));
+    return state;
+  }),
+
+  endTurn: () => {
+    const current = get();
+    if (current.battle.winner || current.activePlayer !== "player") return;
+    set((snapshot) => {
+      const state: GameState = { ...snapshot, player: clonePlayer(snapshot.player), enemy: clonePlayer(snapshot.enemy), battle: { ...snapshot.battle }, ui: { ...snapshot.ui } };
+      state.phase = "endPhase";
+      resolveOverpressurePenalty(state, "player");
+      state.battle.selectedAttackerId = null;
+      state.ui.status = "A pressão muda de lado.";
+      return state;
+    });
+    get().runEnemyTurn();
   },
-  enemyTurn: async () => {
-    if (useBattleStore.getState().winner) return;
-    await startTurn("enemy");
-    await executeEnemyActions();
-    if (useBattleStore.getState().winner) return;
-    await startTurn("player");
+
+  runEnemyTurn: () => {
+    get().startTurn("enemy");
+    const plan = buildEnemyPlan(get());
+    plan.forEach((action) => {
+      if (get().battle.winner) return;
+      if (action.type === "play") get().playCard("enemy", action.cardId);
+      if (action.type === "attack") get().attack(action.attackerId, action.target);
+    });
+    set((snapshot) => {
+      const state: GameState = { ...snapshot, player: clonePlayer(snapshot.player), enemy: clonePlayer(snapshot.enemy), battle: { ...snapshot.battle }, ui: { ...snapshot.ui } };
+      resolveOverpressurePenalty(state, "enemy");
+      return state;
+    });
+    if (!get().battle.winner) get().startTurn("player");
   },
+
+  selectAttacker: (cardId) => set((state) => ({ battle: { ...state.battle, selectedAttackerId: cardId } })),
+  selectHandCard: (cardId) => set((state) => ({ battle: { ...state.battle, selectedHandCardId: cardId } })),
+  setScreen: (screen) => set((state) => ({ ui: { ...state.ui, screen } })),
+  setStatus: (status) => set((state) => ({ ui: { ...state.ui, status } })),
+  setBusy: (busy) => set((state) => ({ ui: { ...state.ui, busy } })),
 }));

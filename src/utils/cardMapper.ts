@@ -25,55 +25,44 @@ const getAbility = (card: ApiCard): AbilityType => {
   return "steamBurst";
 };
 
-const withAbilityTuning = (ability: AbilityType, base: { attack: number; defense: number; cost: number }) => {
-  switch (ability) {
-    case "repair":
-      return { attack: base.attack, defense: base.defense + 1, cost: base.cost };
-    case "criticalStrike":
-      return { attack: base.attack + 1, defense: base.defense, cost: base.cost };
-    case "shield":
-      return { attack: base.attack, defense: base.defense + 1, cost: base.cost + 1 };
-    case "overclock":
-      return { attack: base.attack + 1, defense: base.defense, cost: Math.max(1, base.cost - 1) };
-    case "steamBurst":
-    default:
-      return base;
-  }
-};
-
 export const mapApiCardToGameCard = (card: ApiCard, owner: Side): GameCard => {
   const rarity = rarityFromValue(card.value);
   const cardClass = suitToClass[card.suit];
   const ability = getAbility(card);
   const classBuff = classModifiers[cardClass];
   const base = rarityStats[rarity];
-  const tuned = withAbilityTuning(ability, {
-    attack: Math.max(1, base.attack + classBuff.attack),
-    defense: Math.max(1, base.defense + classBuff.defense),
-    cost: Math.min(8, Math.max(1, base.cost + classBuff.cost)),
-  });
   const displayValue = faceName[card.value] ?? card.value;
   const displaySuit = suitDisplay[card.suit];
+  const attack = Math.max(1, base.attack + classBuff.attack);
+  const defense = Math.max(1, base.defense + classBuff.defense);
 
   return {
-    id: `${owner}-${card.code}-${crypto.randomUUID()}`,
+    id: card.code,
+    instanceId: `${owner}-${card.code}-${crypto.randomUUID()}`,
     baseId: card.code,
+    ownerId: owner,
+    owner,
     code: card.code,
     name: `${displayValue} of ${displaySuit}`,
     suit: card.suit,
     value: card.value,
     class: cardClass,
     rarity,
-    attack: tuned.attack,
-    defense: tuned.defense,
-    currentDefense: tuned.defense,
-    energyCost: tuned.cost,
+    attack,
+    defense,
+    currentAttack: attack,
+    currentDefense: defense,
+    maxDefense: defense,
+    energyCost: Math.min(8, Math.max(1, base.cost + classBuff.cost)),
     ability,
     description: abilityDescriptions[ability],
     image: card.images.png,
-    owner,
-    hasActed: false,
     shield: 0,
+    statusEffects: [],
+    canAttack: false,
+    hasActed: false,
+    summonSickness: true,
+    attackCount: 0,
   };
 };
 
