@@ -27,6 +27,19 @@ body {
   min-height: 100vh;
   background-color: #07080c;
   color: #f7f0df;
+  overflow-x: hidden;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 20% 15%, rgba(216, 138, 99, 0.08), transparent 18%),
+    radial-gradient(circle at 82% 78%, rgba(235, 203, 113, 0.08), transparent 18%),
+    linear-gradient(180deg, rgba(255,255,255,0.02), transparent 12%, transparent 88%, rgba(255,255,255,0.02));
+  mix-blend-mode: screen;
 }
 
 button {

@@ -1,4 +1,4 @@
-import { BattleScreen } from "@/features/battle/BattleScreen";
+import { BattleScreen } from "@/features/game/BattleScreen";
 import { MainMenu } from "@/features/game/MainMenu";
 import { ResultScreen } from "@/features/game/ResultScreen";
 import { useUiStore } from "@/store/uiStore";
