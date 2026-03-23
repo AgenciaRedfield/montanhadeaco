@@ -51,21 +51,24 @@ export const CardView = ({ card, compact = false, selectable = false, selected =
         <span>{card.class}</span>
         <span>{card.rarity}</span>
       </div>
-      <div className="absolute left-3 top-7 flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-full border border-brass-100/18 bg-black/42 font-display text-sm sm:text-base text-brass-50">
+      <div className="absolute left-3 top-7 z-20 flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-full border border-brass-100/18 bg-black/55 font-display text-sm sm:text-base text-brass-50">
         {card.energyCost}
       </div>
-      <div className="absolute right-3 top-7 h-8 w-8 sm:h-9 sm:w-9 rounded-full border border-copper-300/20 bg-copper-600/8 shadow-[0_0_18px_rgba(216,138,99,0.18)]" />
+      <div className="absolute right-3 top-7 z-20 h-8 w-8 sm:h-9 sm:w-9 rounded-full border border-copper-300/20 bg-copper-600/8 shadow-[0_0_18px_rgba(216,138,99,0.18)]" />
 
       <div className="relative flex h-full flex-col p-2.5 sm:p-3">
         <div className="pt-10 sm:pt-11">
-          <div className="rounded-[0.9rem] sm:rounded-[1rem] border border-brass-100/10 bg-black/30 px-2 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
+          <div className="rounded-[0.9rem] sm:rounded-[1rem] border border-brass-100/10 bg-black/38 px-2 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-sm">
             <p className="line-clamp-2 font-display text-[0.95rem] sm:text-[1.05rem] leading-none text-brass-50">{card.name}</p>
           </div>
         </div>
 
         <div className="relative mt-2 flex-1 overflow-hidden rounded-[1rem] sm:rounded-[1.15rem] border border-brass-100/10 bg-[radial-gradient(circle_at_top,rgba(216,138,99,0.18),transparent_40%),linear-gradient(180deg,rgba(22,16,9,0.7),rgba(5,6,8,0.95))]">
           {card.image ? (
-            <img src={card.image} alt={card.name} className="h-full w-full object-cover opacity-85 mix-blend-screen" />
+            <>
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(235,203,113,0.08),transparent_65%)]" />
+              <img src={card.image} alt={card.name} className="relative z-10 h-full w-full object-contain p-2 opacity-95 drop-shadow-[0_16px_22px_rgba(0,0,0,0.5)]" />
+            </>
           ) : (
             <div className="flex h-full flex-col items-center justify-center gap-2">
               <div className="grid grid-cols-3 gap-1.5 opacity-35">

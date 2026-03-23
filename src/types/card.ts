@@ -20,6 +20,7 @@ export type Card = {
   energyCost: number;
   ability: string;
   description: string;
+  image?: string;
 };
 
 export type RuntimeCard = Card & {
@@ -36,7 +37,6 @@ export type RuntimeCard = Card & {
   hasActed: boolean;
   summonSickness: boolean;
   attackCount: number;
-  image?: string;
   code?: string;
   suit?: string;
   value?: string;

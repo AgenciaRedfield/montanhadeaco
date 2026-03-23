@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { motion } from "framer-motion";
+import { ArenaModeModal } from "@/components/ArenaModeModal";
 import { CloudAuthPanel } from "@/components/CloudAuthPanel";
 import { FORGE_COST } from "@/services/progressionService";
 import { GameLayout } from "@/features/game/GameLayout";
@@ -6,16 +8,34 @@ import { useGameStore } from "@/store/gameStore";
 
 export const DashboardScreen = () => {
   const profile = useGameStore((state) => state.profile);
+  const auth = useGameStore((state) => state.auth);
   const startGame = useGameStore((state) => state.startGame);
   const resetProgress = useGameStore((state) => state.resetProgress);
   const setScreen = useGameStore((state) => state.setScreen);
+  const setStatus = useGameStore((state) => state.setStatus);
   const openForge = useGameStore((state) => state.openForge);
   const openDeckBuilder = useGameStore((state) => state.openDeckBuilder);
   const unlockMusic = useGameStore((state) => state.unlockMusic);
+  const [arenaModalOpen, setArenaModalOpen] = useState(false);
 
   const winRate = profile.battlesPlayed > 0 ? Math.round((profile.victories / profile.battlesPlayed) * 100) : 0;
   const collectionProgress = Math.round((profile.unlockedCards.length / 20) * 100);
   const deckProgress = Math.round((profile.selectedDeck.length / 20) * 100);
+
+  const handleChooseAi = () => {
+    unlockMusic();
+    setArenaModalOpen(false);
+    startGame();
+  };
+
+  const handleChoosePvp = () => {
+    setArenaModalOpen(false);
+    if (!auth.userId) {
+      setStatus("Conecte sua conta Supabase para liberar a arena PvP quando a fila online entrar em operacao.");
+      return;
+    }
+    setStatus("Modo PvP preparado no menu da arena. A fila online sera a proxima etapa da fundicao.");
+  };
 
   return (
     <GameLayout>
@@ -28,8 +48,8 @@ export const DashboardScreen = () => {
               Gerencie sua campanha, monte seu deck e abra boosters da Forja antes de entrar em combate dentro da Montanha de Aco.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
-              <button type="button" onClick={() => { unlockMusic(); startGame(); }} className="rounded-[1.25rem] border border-brass-100/20 bg-[linear-gradient(135deg,#d88a63_0%,#ebcb71_48%,#8d4326_100%)] px-6 py-4 text-sm font-semibold uppercase tracking-[0.35em] text-smoke-900">
-                Entrar em Batalha
+              <button type="button" onClick={() => setArenaModalOpen(true)} className="rounded-[1.25rem] border border-brass-100/20 bg-[linear-gradient(135deg,#d88a63_0%,#ebcb71_48%,#8d4326_100%)] px-6 py-4 text-sm font-semibold uppercase tracking-[0.35em] text-smoke-900">
+                Entrar na Arena
               </button>
               <button type="button" onClick={() => openDeckBuilder()} className="rounded-[1.25rem] border border-brass-100/15 bg-white/5 px-6 py-4 text-sm font-semibold uppercase tracking-[0.35em] text-brass-50">
                 Editar Deck
@@ -115,8 +135,8 @@ export const DashboardScreen = () => {
               <button type="button" onClick={() => openForge()} className="rounded-[1.15rem] border border-brass-100/20 bg-[linear-gradient(135deg,rgba(216,138,99,0.18),rgba(235,203,113,0.12),rgba(141,67,38,0.2))] px-5 py-4 text-sm font-semibold uppercase tracking-[0.3em] text-brass-50">
                 Abrir Booster
               </button>
-              <button type="button" onClick={() => { unlockMusic(); startGame(); }} className="rounded-[1.15rem] border border-brass-100/20 bg-[linear-gradient(135deg,#d88a63_0%,#ebcb71_48%,#8d4326_100%)] px-5 py-4 text-sm font-semibold uppercase tracking-[0.3em] text-smoke-900">
-                Escaramuca Rapida
+              <button type="button" onClick={() => setArenaModalOpen(true)} className="rounded-[1.15rem] border border-brass-100/20 bg-[linear-gradient(135deg,#d88a63_0%,#ebcb71_48%,#8d4326_100%)] px-5 py-4 text-sm font-semibold uppercase tracking-[0.3em] text-smoke-900">
+                Entrar na Arena
               </button>
               <button type="button" onClick={() => resetProgress()} className="rounded-[1.15rem] border border-brass-100/15 bg-white/5 px-5 py-4 text-sm font-semibold uppercase tracking-[0.3em] text-brass-50">
                 Zerar Progresso
@@ -125,6 +145,8 @@ export const DashboardScreen = () => {
           </div>
         </aside>
       </div>
+
+      {arenaModalOpen ? <ArenaModeModal onChoosePvp={handleChoosePvp} onChooseAi={handleChooseAi} onClose={() => setArenaModalOpen(false)} /> : null}
     </GameLayout>
   );
 };
