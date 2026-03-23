@@ -12,26 +12,22 @@ import { TurnIndicator } from "@/components/TurnIndicator";
 import { VictoryModal } from "@/components/VictoryModal";
 import { useBattleController } from "@/hooks/useBattleController";
 import { GameLayout } from "@/features/game/GameLayout";
-import { useBattleStore } from "@/store/battleStore";
-import { useEnemyStore } from "@/store/enemyStore";
 import { useGameStore } from "@/store/gameStore";
-import { usePlayerStore } from "@/store/playerStore";
-import { useUiStore } from "@/store/uiStore";
 import type { GameCard } from "@/types/game";
 
 export const BattleScreen = () => {
-  const player = usePlayerStore();
-  const enemy = useEnemyStore();
-  const { selectedAttackerId, turn, onSelectAttacker, onTarget } = useBattleController();
-  const logs = useBattleStore((state) => state.log);
-  const winner = useBattleStore((state) => state.winner);
-  const status = useUiStore((state) => state.status);
-  const screen = useUiStore((state) => state.screen);
-  const setScreen = useUiStore((state) => state.setScreen);
+  const player = useGameStore((state) => state.player);
+  const enemy = useGameStore((state) => state.enemy);
+  const logs = useGameStore((state) => state.battle.logs);
+  const winner = useGameStore((state) => state.battle.winner);
+  const status = useGameStore((state) => state.ui.status);
+  const screen = useGameStore((state) => state.ui.screen);
+  const setScreen = useGameStore((state) => state.setScreen);
   const playCard = useGameStore((state) => state.playCard);
   const endTurn = useGameStore((state) => state.endTurn);
   const startGame = useGameStore((state) => state.startGame);
   const turnNumber = useGameStore((state) => state.turnNumber);
+  const { selectedAttackerId, turn, onSelectAttacker, onTarget } = useBattleController();
   const [hoveredCard, setHoveredCard] = useState<GameCard | null>(null);
 
   return (
@@ -59,14 +55,7 @@ export const BattleScreen = () => {
             <TurnIndicator turn={turn} turnNumber={turnNumber} />
           </section>
 
-          <BoardRow
-            title="Linha Superior"
-            subtitle="Formacao Inimiga"
-            cards={enemy.board}
-            attackMode
-            onCardClick={turn === "player" && selectedAttackerId ? (card) => onTarget({ type: "card", id: card.instanceId, owner: "enemy" }) : undefined}
-            onCardHover={setHoveredCard}
-          />
+          <BoardRow title="Linha Superior" subtitle="Formacao Inimiga" cards={enemy.board} attackMode onCardClick={turn === "player" && selectedAttackerId ? (card) => onTarget({ type: "card", id: card.instanceId, owner: "enemy" }) : undefined} onCardHover={setHoveredCard} />
 
           <section className="rounded-[2.2rem] border border-brass-700/30 bg-[radial-gradient(circle_at_center,rgba(216,138,99,0.08),transparent_48%),linear-gradient(180deg,rgba(0,0,0,0.18),rgba(0,0,0,0.3))] p-5 shadow-insetPanel backdrop-blur-xl">
             <div className="grid gap-4 lg:grid-cols-[1fr_360px] lg:items-center">
@@ -76,7 +65,7 @@ export const BattleScreen = () => {
                 <p className="mt-3 max-w-3xl text-sm leading-relaxed text-brass-100/70">{status}</p>
               </div>
               <div className="rounded-[1.8rem] border border-copper-400/15 bg-black/30 p-4">
-                <EndTurnButton disabled={turn !== "player"} onClick={() => endTurn()} />
+                <EndTurnButton disabled={turn !== "player"} onClick={endTurn} />
                 <button type="button" onClick={() => onTarget({ type: "player", id: enemy.id, owner: "enemy" })} disabled={turn !== "player" || !selectedAttackerId} className="mt-3 w-full rounded-[1.2rem] border border-brass-100/12 bg-white/5 px-5 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-brass-50 disabled:opacity-40">
                   Ataque Direto
                 </button>
@@ -109,14 +98,7 @@ export const BattleScreen = () => {
             </div>
           </section>
 
-          <BoardRow
-            title="Linha Inferior"
-            subtitle="Sua Formacao"
-            cards={player.board}
-            selectedId={selectedAttackerId}
-            onCardClick={turn === "player" ? (card) => onSelectAttacker(card.instanceId) : undefined}
-            onCardHover={setHoveredCard}
-          />
+          <BoardRow title="Linha Inferior" subtitle="Sua Formacao" cards={player.board} selectedId={selectedAttackerId} onCardClick={turn === "player" ? (card) => onSelectAttacker(card.instanceId) : undefined} onCardHover={setHoveredCard} />
 
           <HandArea cards={player.hand} disabled={turn !== "player" || player.board.length >= 5} onPlay={(card) => playCard("player", card.instanceId)} onCardHover={setHoveredCard} />
         </div>
@@ -136,8 +118,8 @@ export const BattleScreen = () => {
         </aside>
       </div>
 
-      {screen === "victory" ? <VictoryModal onPlayAgain={() => startGame()} onBackToMenu={() => setScreen("menu")} /> : null}
-      {screen === "defeat" ? <DefeatModal onPlayAgain={() => startGame()} onBackToMenu={() => setScreen("menu")} /> : null}
+      {screen === "victory" ? <VictoryModal onPlayAgain={startGame} onBackToMenu={() => setScreen("menu")} /> : null}
+      {screen === "defeat" ? <DefeatModal onPlayAgain={startGame} onBackToMenu={() => setScreen("menu")} /> : null}
     </GameLayout>
   );
 };

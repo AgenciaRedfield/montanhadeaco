@@ -13,6 +13,17 @@ type BattleView = {
   reset: () => void;
 };
 
+const stableBattleView: BattleView = {
+  turn: "idle",
+  selectedAttackerId: null,
+  winner: null,
+  log: [],
+  selectAttacker: (cardId) => useGameStore.getState().selectAttacker(cardId),
+  pushLog: () => undefined,
+  setTurn: () => undefined,
+  reset: () => useGameStore.getState().resetGame(),
+};
+
 const toTurnPhase = (activePlayer: "player" | "enemy", phase: string): TurnPhase => {
   if (phase === "idle") return "idle";
   if (phase === "enemyTurn" || activePlayer === "enemy") return "enemy";
@@ -22,16 +33,10 @@ const toTurnPhase = (activePlayer: "player" | "enemy", phase: string): TurnPhase
 
 export const useBattleStore = <T = BattleView>(selector?: (state: BattleView) => T) => {
   return useGameStore((state) => {
-    const battleState: BattleView = {
-      turn: toTurnPhase(state.activePlayer, state.phase),
-      selectedAttackerId: state.battle.selectedAttackerId,
-      winner: state.battle.winner,
-      log: state.battle.logs,
-      selectAttacker: (cardId) => useGameStore.getState().selectAttacker(cardId),
-      pushLog: () => undefined,
-      setTurn: () => undefined,
-      reset: () => useGameStore.getState().resetGame(),
-    };
-    return selector ? selector(battleState) : (battleState as T);
+    stableBattleView.turn = toTurnPhase(state.activePlayer, state.phase);
+    stableBattleView.selectedAttackerId = state.battle.selectedAttackerId;
+    stableBattleView.winner = state.battle.winner;
+    stableBattleView.log = state.battle.logs;
+    return selector ? selector(stableBattleView) : (stableBattleView as T);
   });
 };

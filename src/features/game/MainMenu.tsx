@@ -1,13 +1,12 @@
 import { motion } from "framer-motion";
 import { GameLayout } from "@/features/game/GameLayout";
 import { useGameStore } from "@/store/gameStore";
-import { useUiStore } from "@/store/uiStore";
 
 export const MainMenu = () => {
   const startGame = useGameStore((state) => state.startGame);
   const resetGame = useGameStore((state) => state.resetGame);
-  const busy = useUiStore((state) => state.busy);
-  const status = useUiStore((state) => state.status);
+  const busy = useGameStore((state) => state.ui.busy);
+  const status = useGameStore((state) => state.ui.status);
 
   return (
     <GameLayout>
@@ -45,10 +44,10 @@ export const MainMenu = () => {
             <p className="mt-3 font-display text-4xl text-brass-50">Caldeiras prontas</p>
             <p className="mt-5 rounded-[1.5rem] border border-white/6 bg-white/[0.03] p-4 text-sm leading-relaxed text-brass-100/72">{status}</p>
             <div className="mt-8 space-y-3">
-              <button type="button" onClick={() => startGame()} disabled={busy} className="w-full rounded-[1.3rem] border border-brass-100/20 bg-[linear-gradient(135deg,#d88a63_0%,#ebcb71_48%,#8d4326_100%)] px-5 py-4 text-sm font-semibold uppercase tracking-[0.35em] text-smoke-900 disabled:opacity-60">
+              <button type="button" onClick={startGame} disabled={busy} className="w-full rounded-[1.3rem] border border-brass-100/20 bg-[linear-gradient(135deg,#d88a63_0%,#ebcb71_48%,#8d4326_100%)] px-5 py-4 text-sm font-semibold uppercase tracking-[0.35em] text-smoke-900 disabled:opacity-60">
                 {busy ? "Pressurizando" : "Jogar"}
               </button>
-              <button type="button" onClick={() => resetGame()} className="w-full rounded-[1.3rem] border border-brass-100/15 bg-white/5 px-5 py-4 text-sm font-semibold uppercase tracking-[0.35em] text-brass-50">
+              <button type="button" onClick={resetGame} className="w-full rounded-[1.3rem] border border-brass-100/15 bg-white/5 px-5 py-4 text-sm font-semibold uppercase tracking-[0.35em] text-brass-50">
                 Resetar Jogo
               </button>
             </div>

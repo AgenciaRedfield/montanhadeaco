@@ -2,10 +2,10 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { BattleScreen } from "@/features/game/BattleScreen";
 import { MainMenu } from "@/features/game/MainMenu";
 import { ResultScreen } from "@/features/game/ResultScreen";
-import { useUiStore } from "@/store/uiStore";
+import { useGameStore } from "@/store/gameStore";
 
 const AppContent = () => {
-  const screen = useUiStore((state) => state.screen);
+  const screen = useGameStore((state) => state.ui.screen);
 
   if (screen === "menu") return <MainMenu />;
   if (screen === "battle") return <BattleScreen />;
