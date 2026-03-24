@@ -1,9 +1,12 @@
+﻿import { useState } from "react";
 import { motion } from "framer-motion";
+import { CardLoreModal } from "@/components/CardLoreModal";
 import { CardView } from "@/components/CardView";
-import { DECK_COPY_LIMIT, DECK_SIZE } from "@/services/progressionService";
 import { cards } from "@/data/cards";
 import { GameLayout } from "@/features/game/GameLayout";
+import { DECK_COPY_LIMIT, DECK_SIZE } from "@/services/progressionService";
 import { useGameStore } from "@/store/gameStore";
+import type { GameCard } from "@/types/game";
 import { countDeckCopies, createRuntimeCard } from "@/utils/gameHelpers";
 
 export const DeckBuilderScreen = () => {
@@ -12,6 +15,7 @@ export const DeckBuilderScreen = () => {
   const addDeckCard = useGameStore((state) => state.addDeckCard);
   const removeDeckCard = useGameStore((state) => state.removeDeckCard);
   const setScreen = useGameStore((state) => state.setScreen);
+  const [selectedCard, setSelectedCard] = useState<GameCard | null>(null);
 
   const unlocked = cards.filter((card) => profile.unlockedCards.includes(card.id));
   const deckCards = profile.selectedDeck
@@ -39,6 +43,10 @@ export const DeckBuilderScreen = () => {
             {status}
           </div>
 
+          <div className="mb-4 text-xs uppercase tracking-[0.24em] text-brass-100/48">
+            Clique em uma carta para abrir o arquivo completo com historia, atributos e detalhes taticos.
+          </div>
+
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
             {unlocked.map((card, index) => {
               const copies = countDeckCopies(profile.selectedDeck, card.id);
@@ -47,10 +55,20 @@ export const DeckBuilderScreen = () => {
 
               return (
                 <div key={card.id} className="relative">
-                  <CardView card={preview} compact />
+                  <CardView card={preview} compact selectable onClick={() => setSelectedCard(preview)} />
                   <div className="absolute inset-x-2 top-2 flex items-center justify-between gap-2 rounded-[0.8rem] border border-brass-100/10 bg-black/60 px-2 py-1 text-[10px] uppercase tracking-[0.22em] text-brass-50">
                     <span>{copies}/{DECK_COPY_LIMIT}</span>
-                    <button type="button" onClick={() => addDeckCard(card.id)} disabled={!canAdd} className="rounded-md border border-brass-100/15 bg-white/10 px-2 py-1 disabled:opacity-35">+</button>
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        addDeckCard(card.id);
+                      }}
+                      disabled={!canAdd}
+                      className="rounded-md border border-brass-100/15 bg-white/10 px-2 py-1 disabled:opacity-35"
+                    >
+                      +
+                    </button>
                   </div>
                 </div>
               );
@@ -75,7 +93,7 @@ export const DeckBuilderScreen = () => {
                 <div key={`${card.baseId}-${index}`} className="flex items-center justify-between gap-3 rounded-[1rem] border border-brass-100/10 bg-black/35 px-4 py-3 text-sm text-brass-50">
                   <div>
                     <p className="font-semibold">{index + 1}. {card.name}</p>
-                    <p className="text-[11px] uppercase tracking-[0.22em] text-brass-100/52">{card.class} � {card.rarity}</p>
+                    <p className="text-[11px] uppercase tracking-[0.22em] text-brass-100/52">{card.class} • {card.rarity}</p>
                   </div>
                   <button type="button" onClick={() => removeDeckCard(index)} className="rounded-[0.9rem] border border-brass-100/15 bg-white/5 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-brass-50">
                     Remover
@@ -89,6 +107,8 @@ export const DeckBuilderScreen = () => {
           </div>
         </section>
       </div>
+
+      {selectedCard ? <CardLoreModal card={selectedCard} onClose={() => setSelectedCard(null)} /> : null}
     </GameLayout>
   );
 };

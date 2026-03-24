@@ -1,9 +1,12 @@
+﻿import { useState } from "react";
 import { motion } from "framer-motion";
+import { CardLoreModal } from "@/components/CardLoreModal";
 import { CardView } from "@/components/CardView";
 import { cards } from "@/data/cards";
 import { GameLayout } from "@/features/game/GameLayout";
 import { FORGE_COST } from "@/services/progressionService";
 import { useGameStore } from "@/store/gameStore";
+import type { GameCard } from "@/types/game";
 import { createRuntimeCard } from "@/utils/gameHelpers";
 
 export const ForgeScreen = () => {
@@ -12,6 +15,7 @@ export const ForgeScreen = () => {
   const forgeResults = useGameStore((state) => state.ui.forgeResults);
   const forgeCard = useGameStore((state) => state.forgeCard);
   const setScreen = useGameStore((state) => state.setScreen);
+  const [selectedCard, setSelectedCard] = useState<{ card: GameCard; unlocked: boolean } | null>(null);
 
   const unlockedIds = new Set(profile.unlockedCards);
   const unlockedCount = profile.unlockedCards.length;
@@ -76,7 +80,7 @@ export const ForgeScreen = () => {
             {recentRewards.length > 0 ? (
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 {recentRewards.map((card) => (
-                  <CardView key={card.instanceId} card={card} compact />
+                  <CardView key={card.instanceId} card={card} compact selectable onClick={() => setSelectedCard({ card, unlocked: true })} />
                 ))}
               </div>
             ) : (
@@ -93,13 +97,13 @@ export const ForgeScreen = () => {
               <p className="text-[10px] uppercase tracking-[0.34em] text-brass-100/48">Colecao Tatica</p>
               <h2 className="mt-1 font-display text-3xl text-brass-50">Cartas da Fundicao</h2>
             </div>
-            <p className="text-xs uppercase tracking-[0.28em] text-brass-100/46">Seu deck de batalha usa a colecao desbloqueada</p>
+            <p className="text-xs uppercase tracking-[0.28em] text-brass-100/46">Clique em uma carta para ver historia, detalhes e atributos</p>
           </div>
 
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
             {previews.map(({ preview, unlocked }) => (
               <div key={preview.baseId} className={`relative ${unlocked ? "" : "opacity-55 saturate-0"}`}>
-                <CardView card={preview} compact />
+                <CardView card={preview} compact selectable onClick={() => setSelectedCard({ card: preview, unlocked })} />
                 <div className="pointer-events-none absolute inset-x-2 bottom-2 rounded-[0.9rem] border border-brass-100/10 bg-black/62 px-3 py-2 text-center text-[10px] font-semibold uppercase tracking-[0.26em] text-brass-50">
                   {unlocked ? "Desbloqueada" : "Bloqueada"}
                 </div>
@@ -108,6 +112,8 @@ export const ForgeScreen = () => {
           </div>
         </section>
       </div>
+
+      {selectedCard ? <CardLoreModal card={selectedCard.card} unlocked={selectedCard.unlocked} onClose={() => setSelectedCard(null)} /> : null}
     </GameLayout>
   );
 };

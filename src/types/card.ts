@@ -1,4 +1,4 @@
-export type PlayerId = "player" | "enemy";
+﻿export type PlayerId = "player" | "enemy";
 export type CardClass = "tank" | "assassin" | "support" | "engineer";
 export type CardRarity = "common" | "uncommon" | "rare" | "epic" | "legendary" | "mythic";
 export type StatusKey = "shield" | "taunt" | "dodge" | "stun" | "bonusAttack" | "bonusDefense" | "damageReduction" | "passiveDamage";
@@ -21,6 +21,9 @@ export type Card = {
   ability: string;
   description: string;
   image?: string;
+  lore?: string;
+  details?: string[];
+  attributes?: string[];
 };
 
 export type RuntimeCard = Card & {
