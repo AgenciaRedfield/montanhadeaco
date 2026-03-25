@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { ActionLog } from "@/components/ActionLog";
 import { BattleFeedback } from "@/components/BattleFeedback";
 import { BoardRow } from "@/components/BoardRow";
