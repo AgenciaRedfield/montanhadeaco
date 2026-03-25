@@ -5,6 +5,7 @@ import { DeckBuilderScreen } from "@/features/game/DeckBuilderScreen";
 import { ForgeScreen } from "@/features/game/ForgeScreen";
 import { BattleScreen } from "@/features/game/BattleScreen";
 import { MainMenu } from "@/features/game/MainMenu";
+import { AdminScreen } from "@/features/game/AdminScreen";
 import { ResultScreen } from "@/features/game/ResultScreen";
 import { AmbientAudio } from "@/features/ui/AmbientAudio";
 import { supabase } from "@/services/supabase";
@@ -42,6 +43,7 @@ const AppContent = () => {
   if (screen === "deck-builder") return <DeckBuilderScreen />;
   if (screen === "battle") return <BattleScreen />;
   if (screen === "victory" || screen === "defeat") return <ResultScreen />;
+  if (screen === "admin") return <AdminScreen />;
   return <MainMenu />;
 };
 

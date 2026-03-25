@@ -14,7 +14,7 @@ export type ApiCard = {
   value: "ACE" | "KING" | "QUEEN" | "JACK" | string;
 };
 export type { CardClass, CardRarity };
-export type GameScreen = "menu" | "dashboard" | "forge" | "deck-builder" | "battle" | "victory" | "defeat";
+export type GameScreen = "menu" | "dashboard" | "forge" | "deck-builder" | "battle" | "victory" | "defeat" | "admin";
 export type GamePhase = "idle" | "startTurn" | "drawPhase" | "resourcePhase" | "mainPhase" | "attackPhase" | "endPhase" | "enemyTurn" | "finished";
 export type TurnPhase = "idle" | "player" | "enemy" | "resolving";
 export type TargetType = "player" | "card";

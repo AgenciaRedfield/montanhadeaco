@@ -1,4 +1,4 @@
-﻿import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { CardView } from "@/components/CardView";
 import type { GameCard } from "@/types/game";
 
@@ -9,11 +9,25 @@ interface BoardRowProps {
   selectedId?: string | null;
   attackMode?: boolean;
   battlefield?: boolean;
+  /** Se true, destaca todas as cartas como alvo válido (pulsação vermelha) */
+  highlightTargets?: boolean;
   onCardClick?: (card: GameCard) => void;
   onCardHover?: (card: GameCard | null) => void;
+  onInspect?: (card: GameCard) => void;
 }
 
-export const BoardRow = ({ title, subtitle, cards, selectedId, attackMode = false, battlefield = false, onCardClick, onCardHover }: BoardRowProps) => {
+export const BoardRow = ({
+  title,
+  subtitle,
+  cards,
+  selectedId,
+  attackMode = false,
+  battlefield = false,
+  highlightTargets = false,
+  onCardClick,
+  onCardHover,
+  onInspect,
+}: BoardRowProps) => {
   const emptySlots = Math.max(0, 5 - cards.length);
 
   return (
@@ -34,10 +48,28 @@ export const BoardRow = ({ title, subtitle, cards, selectedId, attackMode = fals
 
           <AnimatePresence>
             {cards.map((card, index) => (
-              <motion.div key={card.instanceId} layout initial={{ opacity: 0, y: attackMode ? -16 : 16, scale: 0.92 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -10, scale: 0.88 }} transition={{ delay: index * 0.03 }} className={battlefield ? "relative z-10 flex justify-center" : undefined}>
+              <motion.div
+                key={card.instanceId}
+                layout
+                initial={{ opacity: 0, y: attackMode ? -16 : 16, scale: 0.92 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -10, scale: 0.88 }}
+                transition={{ delay: index * 0.03 }}
+                className={battlefield ? "relative z-10 flex justify-center" : undefined}
+              >
                 {battlefield ? <div className="absolute inset-x-3 top-[3.1rem] h-[7.8rem] rounded-[1.5rem] border border-black/18 bg-[linear-gradient(180deg,rgba(113,77,47,0.22),rgba(57,33,20,0.08))]" /> : null}
                 <div className={battlefield ? "origin-center scale-[0.82] sm:scale-[0.9] lg:scale-100" : ""}>
-                  <CardView card={card} compact selected={selectedId === card.instanceId} selectable={!!onCardClick} disabled={!onCardClick} onClick={() => onCardClick?.(card)} onHoverChange={onCardHover} />
+                  <CardView
+                    card={card}
+                    compact
+                    selected={selectedId === card.instanceId}
+                    targetHighlight={highlightTargets && !!onCardClick}
+                    selectable={!!onCardClick}
+                    disabled={!onCardClick}
+                    onClick={() => onCardClick?.(card)}
+                    onHoverChange={onCardHover}
+                    onInspect={onInspect}
+                  />
                 </div>
               </motion.div>
             ))}

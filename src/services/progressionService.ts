@@ -157,13 +157,46 @@ export const loadCloudSnapshot = async (userId: string) => {
   return mapCloudRowToSnapshot(data as CloudProgressRow);
 };
 
+export const mergeSnapshots = (local: { profile: ProgressProfile; settings: SettingsState }, cloud: { profile: ProgressProfile; settings: SettingsState }) => {
+  // O merge prioriza o maior progresso (vitorias, nivel, creditos e uniao de cartas)
+  const mergedProfile: ProgressProfile = {
+    ...cloud.profile,
+    victories: Math.max(local.profile.victories, cloud.profile.victories),
+    level: Math.max(local.profile.level, cloud.profile.level),
+    forgeCredits: Math.max(local.profile.forgeCredits, cloud.profile.forgeCredits),
+    battlesPlayed: Math.max(local.profile.battlesPlayed, cloud.profile.battlesPlayed),
+    unlockedCards: Array.from(new Set([...local.profile.unlockedCards, ...cloud.profile.unlockedCards])),
+    selectedDeck: local.profile.victories >= cloud.profile.victories ? local.profile.selectedDeck : cloud.profile.selectedDeck,
+    lastPlayedAt: local.profile.lastPlayedAt && cloud.profile.lastPlayedAt 
+      ? (new Date(local.profile.lastPlayedAt) > new Date(cloud.profile.lastPlayedAt) ? local.profile.lastPlayedAt : cloud.profile.lastPlayedAt)
+      : (local.profile.lastPlayedAt || cloud.profile.lastPlayedAt),
+    cloudEnabled: true,
+    syncStatus: "synced",
+  };
+
+  const mergedSettings: SettingsState = {
+    ...cloud.settings,
+    musicUnlocked: local.settings.musicUnlocked || cloud.settings.musicUnlocked,
+  };
+
+  return { profile: normalizeProfile(mergedProfile), settings: mergedSettings };
+};
+
 export const loadProgressSnapshot = async (userId?: string | null) => {
   const local = await loadLocalSnapshot();
   if (!userId) return local;
 
   const cloud = await loadCloudSnapshot(userId);
-  if (cloud) return cloud;
+  
+  if (cloud) {
+    // Se existe na nuvem, fazemos o merge com o local para nao perder o que foi feito offline/pre-login
+    const merged = mergeSnapshots(local, cloud);
+    // Salva o resultado do merge de volta na nuvem e local
+    await saveProgressSnapshot(merged.profile, merged.settings, userId);
+    return merged;
+  }
 
+  // Se nao existe na nuvem, sobe o local
   await saveProgressSnapshot({ ...local.profile, cloudEnabled: true, syncStatus: "saving" }, local.settings, userId);
   return {
     profile: { ...local.profile, cloudEnabled: true, syncStatus: "synced" },
